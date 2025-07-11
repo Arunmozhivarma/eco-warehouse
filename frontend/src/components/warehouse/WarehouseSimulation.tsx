@@ -125,7 +125,7 @@ export const WarehouseSimulation = () => {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span>Simulation Controls</span>
+            <span>Optimized Path</span>
             <div className="flex gap-2">
               <Button
                 onClick={() => setIsRunning(!isRunning)}
@@ -133,7 +133,7 @@ export const WarehouseSimulation = () => {
                 disabled={optimizedQueue.length === 0}
               >
                 {isRunning ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
-                {isRunning ? "Pause" : "Start"} Simulation
+                {isRunning ? "Pause" : "Show"} Path
               </Button>
               <Button onClick={resetSimulation} variant="outline">
                 <RotateCcw className="w-4 h-4 mr-2" />

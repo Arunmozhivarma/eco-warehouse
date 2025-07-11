@@ -6,55 +6,87 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Users, TrendingDown, Award, LogOut, Zap, Leaf } from "lucide-react";
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client (replace with your actual keys)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const ManagerDashboard = () => {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
+  const [monthlyEnergyData, setMonthlyEnergyData] = useState([]);
+  const [departmentEfficiency, setDepartmentEfficiency] = useState([]);
+  const [totalEnergySaved, setTotalEnergySaved] = useState(0);
+  const [totalDeliveriesToday, setTotalDeliveriesToday] = useState(0);
+  const [workerLeaderboard, setWorkerLeaderboard] = useState([]);
+  const [liveDeliveries, setLiveDeliveries] = useState([]);
 
   useEffect(() => {
     const userType = localStorage.getItem("userType");
     const storedUsername = localStorage.getItem("username");
-    
     if (userType !== "manager" || !storedUsername) {
       navigate("/login");
       return;
     }
-    
     setUsername(storedUsername);
   }, [navigate]);
+
+  useEffect(() => {
+    // Fetch monthly energy savings
+    const fetchMonthlyEnergy = async () => {
+      const { data, error } = await supabase.rpc('monthly_energy_savings');
+      if (!error && data) setMonthlyEnergyData(data);
+    };
+    // Fetch department efficiency
+    const fetchDepartmentEfficiency = async () => {
+      const { data, error } = await supabase.from('department_efficiency').select('*');
+      if (!error && data) {
+        setDepartmentEfficiency(data.map((dept, idx) => ({
+          name: dept.department_name,
+          value: dept.avg_energy_used,
+          color: ["#10b981", "#3b82f6", "#f59e0b", "#ef4444"][idx % 4]
+        })));
+      }
+    };
+    // Fetch today's stats
+    const fetchTodayStats = async () => {
+      const { data, error } = await supabase.rpc('today_energy_and_deliveries');
+      if (!error && data && data.length > 0) {
+        setTotalEnergySaved(data[0].energy_saved || 0);
+        setTotalDeliveriesToday(data[0].deliveries || 0);
+      }
+    };
+    // Fetch worker leaderboard
+    const fetchWorkerLeaderboard = async () => {
+      const { data, error } = await supabase.rpc('worker_leaderboard');
+      if (!error && data) setWorkerLeaderboard(data);
+    };
+    fetchMonthlyEnergy();
+    fetchDepartmentEfficiency();
+    fetchTodayStats();
+    fetchWorkerLeaderboard();
+  }, []);
+
+  useEffect(() => {
+    // Subscribe to live deliveries
+    const subscription = supabase
+      .channel('public:deliveries')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, (payload) => {
+        setLiveDeliveries((prev) => [payload.new, ...prev]);
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("userType");
     localStorage.removeItem("username");
     navigate("/login");
   };
-
-  // Mock data for demonstration
-  const workerLeaderboard = [
-    { name: "John Smith", energySaved: 2845, deliveries: 124, efficiency: 95 },
-    { name: "Sarah Johnson", energySaved: 2632, deliveries: 118, efficiency: 92 },
-    { name: "Mike Chen", energySaved: 2401, deliveries: 108, efficiency: 89 },
-    { name: "Emma Davis", energySaved: 2198, deliveries: 102, efficiency: 87 },
-    { name: "Alex Wilson", energySaved: 1987, deliveries: 95, efficiency: 83 }
-  ];
-
-  const monthlyEnergyData = [
-    { month: "Jan", saved: 18500, target: 20000 },
-    { month: "Feb", saved: 22300, target: 20000 },
-    { month: "Mar", saved: 19800, target: 20000 },
-    { month: "Apr", saved: 25100, target: 20000 },
-    { month: "May", saved: 23400, target: 20000 },
-    { month: "Jun", saved: 26700, target: 20000 }
-  ];
-
-  const departmentEfficiency = [
-    { name: "Shipping", value: 35, color: "#10b981" },
-    { name: "Receiving", value: 28, color: "#3b82f6" },
-    { name: "Storage", value: 22, color: "#f59e0b" },
-    { name: "Packaging", value: 15, color: "#ef4444" }
-  ];
-
-  const totalEnergySaved = workerLeaderboard.reduce((sum, worker) => sum + worker.energySaved, 0);
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -70,54 +102,49 @@ const ManagerDashboard = () => {
             Logout
           </Button>
         </div>
-
         {/* Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Energy Saved</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Energy Saved Today</CardTitle>
               <Zap className="h-4 w-4 text-yellow-600" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">{totalEnergySaved.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">kWh this month</p>
+              <p className="text-xs text-muted-foreground">kWh today</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Workers</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Deliveries Today</CardTitle>
               <Users className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{workerLeaderboard.length}</div>
-              <p className="text-xs text-muted-foreground">Currently online</p>
+              <div className="text-2xl font-bold">{totalDeliveriesToday}</div>
+              <p className="text-xs text-muted-foreground">completed today</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Efficiency Rate</CardTitle>
               <TrendingDown className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">91.2%</div>
-              <p className="text-xs text-muted-foreground">+2.4% from last month</p>
+              <div className="text-2xl font-bold">{departmentEfficiency.length > 0 ? (departmentEfficiency.reduce((a, b) => a + b.value, 0) / departmentEfficiency.length).toFixed(1) : '0'}%</div>
+              <p className="text-xs text-muted-foreground">Avg. department efficiency</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">CO₂ Reduced</CardTitle>
+              <CardTitle className="text-sm font-medium">Live Deliveries</CardTitle>
               <Leaf className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">4.2</div>
-              <p className="text-xs text-muted-foreground">tons this month</p>
+              <div className="text-2xl font-bold">{liveDeliveries.length}</div>
+              <p className="text-xs text-muted-foreground">since you opened dashboard</p>
             </CardContent>
           </Card>
         </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Monthly Energy Savings Chart */}
           <Card>
@@ -133,13 +160,11 @@ const ManagerDashboard = () => {
                     <YAxis />
                     <Tooltip formatter={(value) => [`${value} kWh`, ""]} />
                     <Bar dataKey="saved" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="target" fill="hsl(var(--muted))" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
-
           {/* Department Efficiency */}
           <Card>
             <CardHeader>
@@ -180,7 +205,6 @@ const ManagerDashboard = () => {
             </CardContent>
           </Card>
         </div>
-
         {/* Worker Leaderboard */}
         <Card>
           <CardHeader>
@@ -219,6 +243,26 @@ const ManagerDashboard = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+        {/* Live Updates Section */}
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle>Live Warehouse Activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-64 overflow-y-auto">
+              {liveDeliveries.length === 0 ? (
+                <div className="text-muted-foreground">No new deliveries yet.</div>
+              ) : (
+                liveDeliveries.map((delivery, idx) => (
+                  <div key={delivery.id || idx} className="p-2 border-b last:border-b-0">
+                    <div className="font-semibold">Delivery #{delivery.id}</div>
+                    <div className="text-xs text-muted-foreground">Energy Used: {delivery.energy_used} kWh | Delivered At: {delivery.delivered_at}</div>
+                  </div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
