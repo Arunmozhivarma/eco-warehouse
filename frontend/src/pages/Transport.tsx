@@ -39,7 +39,7 @@ const Transport = () => {
             Back to Dashboard
           </Button>
           <div className="text-center">
-            <h1 className="text-4xl font-bold mb-2 text-foreground">Smart Warehouse Forklift Router</h1>
+            <h1 className="text-4xl font-bold mb-2 text-foreground">Smart Warehouse Machine Router</h1>
             <p className="text-lg text-muted-foreground">Eco-friendly logistics optimization with real-time routing</p>
           </div>
         </div>
