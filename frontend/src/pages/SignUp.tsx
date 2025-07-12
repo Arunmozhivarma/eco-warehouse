@@ -1,6 +1,5 @@
-
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,59 +12,49 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-const Login = () => {
-  const [loginType, setLoginType] = useState<"manager" | "worker" | null>(null);
-  const [credentials, setCredentials] = useState({ username: "", password: "" });
+const SignUp = () => {
+  const [signUpType, setSignUpType] = useState<"manager" | "worker" | null>(null);
+  const [credentials, setCredentials] = useState({ username: "", password: "", confirmPassword: "" });
   const navigate = useNavigate();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!credentials.username.trim() || !credentials.password.trim()) {
+    if (!credentials.username.trim() || !credentials.password.trim() || !credentials.confirmPassword.trim()) {
       toast({
-        title: "Invalid Credentials",
-        description: "Please enter both username and password",
+        title: "Missing Fields",
+        description: "Please fill in all required fields.",
         variant: "destructive"
       });
       return;
     }
-
-    // Fetch user from Supabase
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('name', credentials.username)
-      .eq('password', credentials.password)
-      .eq('type', loginType)
-      .single();
-
-    if (error || !data) {
+    if (credentials.password !== credentials.confirmPassword) {
       toast({
-        title: "Login Failed",
-        description: "Invalid username, password, or user type.",
+        title: "Password Mismatch",
+        description: "Password and Confirm Password do not match.",
         variant: "destructive"
       });
       return;
     }
-
-    // Store login info in localStorage (for session)
-    localStorage.setItem("userType", loginType!);
-    localStorage.setItem("username", credentials.username);
-
+    // Supabase sign up logic
+    const { error } = await supabase.from('users').insert([
+      { name: credentials.username, password: credentials.password, type: signUpType }
+    ]);
+    if (error) {
+      toast({
+        title: "Sign Up Failed",
+        description: error.message,
+        variant: "destructive"
+      });
+      return;
+    }
     toast({
-      title: "Login Successful",
-      description: `Welcome, ${credentials.username}!`,
+      title: "Sign Up Successful",
+      description: `Welcome, ${credentials.username}! You can now log in.`,
     });
-
-    // Navigate to appropriate dashboard
-    if (loginType === "manager") {
-      navigate("/manager-dashboard");
-    } else {
-      navigate("/worker-dashboard");
-    }
+    navigate("/login");
   };
 
-  if (!loginType) {
+  if (!signUpType) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="w-full max-w-4xl">
@@ -73,10 +62,9 @@ const Login = () => {
             <h1 className="text-4xl font-bold mb-4 text-foreground">Smart Warehouse System</h1>
             <p className="text-lg text-muted-foreground">Eco-friendly logistics optimization platform</p>
           </div>
-
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Manager Login Card */}
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setLoginType("manager")}>
+            {/* Manager Sign Up Card */}
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setSignUpType("manager")}>
               <CardHeader className="text-center">
                 <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
                   <Users className="w-8 h-8 text-primary" />
@@ -85,17 +73,16 @@ const Login = () => {
               </CardHeader>
               <CardContent className="text-center">
                 <p className="text-muted-foreground mb-4">
-                  Access comprehensive analytics, energy optimization reports, and worker performance metrics
+                  Sign up to access analytics, energy optimization, and more
                 </p>
                 <div className="flex items-center justify-center text-primary font-medium">
-                  Continue as Manager
+                  Sign Up as Manager
                   <ChevronRight className="w-4 h-4 ml-1" />
                 </div>
               </CardContent>
             </Card>
-
-            {/* Worker Login Card */}
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setLoginType("worker")}>
+            {/* Worker Sign Up Card */}
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setSignUpType("worker")}>
               <CardHeader className="text-center">
                 <div className="mx-auto w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mb-4">
                   <UserCheck className="w-8 h-8 text-green-600" />
@@ -104,20 +91,20 @@ const Login = () => {
               </CardHeader>
               <CardContent className="text-center">
                 <p className="text-muted-foreground mb-4">
-                  View your energy savings, access transport simulation, and track your daily performance
+                  Sign up to track your energy savings and deliveries
                 </p>
                 <div className="flex items-center justify-center text-green-600 font-medium">
-                  Continue as Worker
+                  Sign Up as Worker
                   <ChevronRight className="w-4 h-4 ml-1" />
                 </div>
               </CardContent>
             </Card>
           </div>
-
           <div className="text-center mt-8">
             <div className="flex items-center justify-center gap-2 text-muted-foreground">
               <Warehouse className="w-5 h-5" />
-              <span>Reducing warehouse energy consumption through smart optimization</span>
+              <span>Already have an account?</span>
+              <Button variant="link" onClick={() => navigate("/login")}>Sign In</Button>
             </div>
           </div>
         </div>
@@ -130,18 +117,18 @@ const Login = () => {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-            {loginType === "manager" ? (
+            {signUpType === "manager" ? (
               <Users className="w-8 h-8 text-primary" />
             ) : (
               <UserCheck className="w-8 h-8 text-green-600" />
             )}
           </div>
           <CardTitle className="text-2xl">
-            {loginType === "manager" ? "Manager Login" : "Worker Login"}
+            {signUpType === "manager" ? "Manager Sign Up" : "Worker Sign Up"}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleSignUp} className="space-y-4">
             <div>
               <Label htmlFor="username">Username</Label>
               <Input
@@ -149,7 +136,7 @@ const Login = () => {
                 type="text"
                 value={credentials.username}
                 onChange={(e) => setCredentials(prev => ({ ...prev, username: e.target.value }))}
-                placeholder="Enter your username"
+                placeholder="Choose a username"
                 required
               />
             </div>
@@ -160,31 +147,38 @@ const Login = () => {
                 type="password"
                 value={credentials.password}
                 onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
-                placeholder="Enter your password"
+                placeholder="Create a password"
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={credentials.confirmPassword}
+                onChange={(e) => setCredentials(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                placeholder="Confirm your password"
                 required
               />
             </div>
             <div className="flex gap-2">
               <Button type="submit" className="flex-1">
-                Login
+                Sign Up
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setLoginType(null)}
+                onClick={() => setSignUpType(null)}
               >
                 Back
               </Button>
             </div>
           </form>
-          <div className="text-center mt-4">
-            <span className="text-muted-foreground">Don't have an account? </span>
-            <Link to="/signup" className="text-primary underline">Sign Up</Link>
-          </div>
         </CardContent>
       </Card>
     </div>
   );
 };
 
-export default Login;
+export default SignUp; 
