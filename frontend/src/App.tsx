@@ -9,6 +9,7 @@ import ManagerDashboard from "./pages/ManagerDashboard";
 import WorkerDashboard from "./pages/WorkerDashboard";
 import Transport from "./pages/Transport";
 import NotFound from "./pages/NotFound";
+import SignUp from "./pages/SignUp";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/manager-dashboard" element={<ManagerDashboard />} />
           <Route path="/worker-dashboard" element={<WorkerDashboard />} />
           <Route path="/transport" element={<Transport />} />
+          <Route path="/signup" element={<SignUp />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

@@ -1,15 +1,16 @@
 
 import { WarehouseSimulation } from "@/components/warehouse/WarehouseSimulation";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 
 const Index = () => {
+  const navigate = useNavigate();
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto p-4">
-        <div className="mb-6 text-center">
-          <h1 className="text-4xl font-bold mb-2 text-foreground">Smart Warehouse Forklift Router</h1>
-          <p className="text-lg text-muted-foreground">Eco-friendly logistics optimization with real-time routing</p>
-        </div>
-        <WarehouseSimulation />
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background">
+      <h1 className="text-4xl font-bold mb-6 text-foreground">Welcome to Smart Warehouse</h1>
+      <div className="flex gap-4">
+        <Button onClick={() => navigate('/login')}>Sign In</Button>
+        <Button variant="outline" onClick={() => navigate('/signup')}>Sign Up</Button>
       </div>
     </div>
   );

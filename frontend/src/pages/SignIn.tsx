@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,20 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Users, UserCheck, Warehouse, ChevronRight } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-const Login = () => {
+const SignIn = () => {
   const [loginType, setLoginType] = useState<"manager" | "worker" | null>(null);
   const [credentials, setCredentials] = useState({ username: "", password: "" });
   const navigate = useNavigate();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!credentials.username.trim() || !credentials.password.trim()) {
       toast({
         title: "Invalid Credentials",
@@ -29,17 +22,10 @@ const Login = () => {
       });
       return;
     }
-
-    // Fetch user from Supabase
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('name', credentials.username)
-      .eq('password', credentials.password)
-      .eq('type', loginType)
-      .single();
-
-    if (error || !data) {
+    // Check credentials in localStorage (for demo)
+    const users = JSON.parse(localStorage.getItem("users") || "{}");
+    const user = users[credentials.username];
+    if (!user || user.password !== credentials.password || user.type !== loginType) {
       toast({
         title: "Login Failed",
         description: "Invalid username, password, or user type.",
@@ -47,17 +33,12 @@ const Login = () => {
       });
       return;
     }
-
-    // Store login info in localStorage (for session)
     localStorage.setItem("userType", loginType!);
     localStorage.setItem("username", credentials.username);
-
     toast({
       title: "Login Successful",
       description: `Welcome, ${credentials.username}!`,
     });
-
-    // Navigate to appropriate dashboard
     if (loginType === "manager") {
       navigate("/manager-dashboard");
     } else {
@@ -73,10 +54,9 @@ const Login = () => {
             <h1 className="text-4xl font-bold mb-4 text-foreground">Smart Warehouse System</h1>
             <p className="text-lg text-muted-foreground">Eco-friendly logistics optimization platform</p>
           </div>
-
           <div className="grid md:grid-cols-2 gap-6">
             {/* Manager Login Card */}
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setLoginType("manager")}>
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setLoginType("manager")}> 
               <CardHeader className="text-center">
                 <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
                   <Users className="w-8 h-8 text-primary" />
@@ -93,9 +73,8 @@ const Login = () => {
                 </div>
               </CardContent>
             </Card>
-
             {/* Worker Login Card */}
-            <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setLoginType("worker")}>
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => setLoginType("worker")}> 
               <CardHeader className="text-center">
                 <div className="mx-auto w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mb-4">
                   <UserCheck className="w-8 h-8 text-green-600" />
@@ -113,7 +92,6 @@ const Login = () => {
               </CardContent>
             </Card>
           </div>
-
           <div className="text-center mt-8">
             <div className="flex items-center justify-center gap-2 text-muted-foreground">
               <Warehouse className="w-5 h-5" />
@@ -137,7 +115,7 @@ const Login = () => {
             )}
           </div>
           <CardTitle className="text-2xl">
-            {loginType === "manager" ? "Manager Login" : "Worker Login"}
+            {loginType === "manager" ? "Manager Sign In" : "Worker Sign In"}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -166,11 +144,11 @@ const Login = () => {
             </div>
             <div className="flex gap-2">
               <Button type="submit" className="flex-1">
-                Login
+                Sign In
               </Button>
-              <Button
-                type="button"
-                variant="outline"
+              <Button 
+                type="button" 
+                variant="outline" 
                 onClick={() => setLoginType(null)}
               >
                 Back
@@ -187,4 +165,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default SignIn; 

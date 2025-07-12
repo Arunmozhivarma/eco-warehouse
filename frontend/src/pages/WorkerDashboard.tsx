@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,11 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
 import { LogOut, Truck, Zap, Award, TrendingUp, Target } from "lucide-react";
 import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase client (reuse env variables as in ManagerDashboard)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from "@/lib/supabaseClient";
 
 const WorkerDashboard = () => {
   const navigate = useNavigate();
@@ -21,6 +17,11 @@ const WorkerDashboard = () => {
   const [weeklyProgress, setWeeklyProgress] = useState([]);
   const [totalWeeklyEnergy, setTotalWeeklyEnergy] = useState(0);
   const [liveDeliveries, setLiveDeliveries] = useState([]);
+  const [totalDeliveries, setTotalDeliveries] = useState(0);
+  const [totalEnergy, setTotalEnergy] = useState(0);
+  const [energyToday, setEnergyToday] = useState(0);
+  const [deliveriesToday, setDeliveriesToday] = useState(0);
+  const [userUuid, setUserUuid] = useState<string | null>(null);
 
   useEffect(() => {
     const userType = localStorage.getItem("userType");
@@ -33,9 +34,23 @@ const WorkerDashboard = () => {
   }, [navigate]);
 
   useEffect(() => {
+    if (username) {
+      supabase
+        .from('users')
+        .select('id')
+        .eq('name', username)
+        .single()
+        .then(({ data, error }) => {
+          if (data) setUserUuid(data.id);
+        });
+    }
+  }, [username]);
+
+  useEffect(() => {
     // Fetch today's stats
     const fetchTodayStats = async () => {
-      const { data, error } = await supabase.rpc('today_energy_and_deliveries_by_user', { username });
+      if (!userUuid) return;
+      const { data, error } = await supabase.rpc('today_energy_and_deliveries_by_user', { user_id: userUuid });
       if (!error && data && data.length > 0) {
         setTodaysStats({
           energySaved: data[0].energy_saved || 0,
@@ -45,36 +60,63 @@ const WorkerDashboard = () => {
         });
       }
     };
-    // Fetch daily energy savings (last 7 days)
-    const fetchDailyEnergy = async () => {
-      const { data, error } = await supabase.rpc('daily_energy_savings_by_user', { username });
+    // Fetch all daily energy savings (all days)
+    const fetchAllEnergy = async () => {
+      if (!userUuid) return;
+      const { data, error } = await supabase.rpc('all_energy_savings_by_user', { user_id: userUuid });
       if (!error && data) setDailyEnergySavings(data);
     };
     // Fetch weekly progress
     const fetchWeeklyProgress = async () => {
-      const { data, error } = await supabase.rpc('weekly_progress_by_user', { username });
+      if (!userUuid) return;
+      const { data, error } = await supabase.rpc('weekly_progress_by_user', { user_id: userUuid });
       if (!error && data) setWeeklyProgress(data);
     };
     // Fetch total weekly energy
     const fetchTotalWeeklyEnergy = async () => {
-      const { data, error } = await supabase.rpc('total_weekly_energy_by_user', { username });
+      if (!userUuid) return;
+      const { data, error } = await supabase.rpc('total_weekly_energy_by_user', { user_id: userUuid });
       if (!error && data && data.length > 0) setTotalWeeklyEnergy(data[0].total || 0);
     };
-    if (username) {
+    // Fetch total deliveries and total energy used from Supabase
+    const fetchDeliveryAnalytics = async () => {
+      const { data, error } = await supabase.from('deliveries').select('energy_used');
+      if (!error && data) {
+        setTotalDeliveries(data.length);
+        setTotalEnergy(data.reduce((sum, d) => sum + (d.energy_used || 0), 0));
+      }
+    };
+    // Fetch today's deliveries and energy from Supabase
+    const fetchTodayStatsSupabase = async () => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const isoToday = today.toISOString();
+      const { data, error } = await supabase
+        .from('deliveries')
+        .select('energy_used, delivered_at')
+        .gte('delivered_at', isoToday);
+      if (!error && data) {
+        setDeliveriesToday(data.length);
+        setEnergyToday(data.reduce((sum, d) => sum + (d.energy_used || 0), 0));
+      }
+    };
+    if (username && userUuid) {
       fetchTodayStats();
-      fetchDailyEnergy();
+      fetchAllEnergy();
       fetchWeeklyProgress();
       fetchTotalWeeklyEnergy();
+      fetchDeliveryAnalytics();
+      fetchTodayStatsSupabase();
     }
-  }, [username]);
+  }, [username, userUuid]);
 
   useEffect(() => {
     // Subscribe to live deliveries for this user
     const subscription = supabase
       .channel('public:deliveries')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, (payload) => {
-        if (payload.new && payload.new.delivered_by === username) {
-          setLiveDeliveries((prev) => [payload.new, ...prev]);
+        if (payload.new && (payload.new as any).delivered_by === username) {
+          setLiveDeliveries((prev) => [(payload.new as any), ...prev]);
         }
       })
       .subscribe();
@@ -92,6 +134,20 @@ const WorkerDashboard = () => {
   const handleTransport = () => {
     navigate("/transport");
   };
+
+  // Pad dailyEnergySavings to always show all 7 days
+  const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const todayIdx = new Date().getDay();
+  const last7Days = Array.from({ length: 7 }, (_, i) => daysOfWeek[(todayIdx - 6 + i + 7) % 7]);
+
+  const paddedData = useMemo(() => {
+    const map = Object.fromEntries((dailyEnergySavings || []).map(d => [d.day, d]));
+    return last7Days.map(day => ({
+      day,
+      saved: map[day]?.saved || 0,
+      target: 50
+    }));
+  }, [dailyEnergySavings]);
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -114,65 +170,49 @@ const WorkerDashboard = () => {
           </div>
         </div>
         {/* Today's Performance Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Energy Saved Today</CardTitle>
               <Zap className="h-4 w-4 text-yellow-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{todaysStats.energySaved}</div>
+              <div className="text-2xl font-bold text-green-600">{energyToday}</div>
               <p className="text-xs text-muted-foreground">kWh saved</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Deliveries</CardTitle>
+              <CardTitle className="text-sm font-medium">Deliveries Today</CardTitle>
               <Truck className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{todaysStats.deliveries}</div>
+              <div className="text-2xl font-bold">{deliveriesToday}</div>
               <p className="text-xs text-muted-foreground">completed today</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Efficiency Rate</CardTitle>
-              <Target className="h-4 w-4 text-green-600" />
+              <CardTitle className="text-sm font-medium">Energy Saved This Week</CardTitle>
+              <Award className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{todaysStats.efficiency}%</div>
-              <p className="text-xs text-muted-foreground">Efficiency today</p>
+              <div className="text-2xl font-bold text-green-700">{totalEnergy}</div>
+              <p className="text-xs text-muted-foreground">kWh this week</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">CO₂ Reduced</CardTitle>
-              <TrendingUp className="h-4 w-4 text-green-600" />
+              <CardTitle className="text-sm font-medium">Total Deliveries</CardTitle>
+              <TrendingUp className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{todaysStats.co2Reduced}</div>
-              <p className="text-xs text-muted-foreground">kg today</p>
+              <div className="text-2xl font-bold text-purple-600">{totalDeliveries}</div>
+              <p className="text-xs text-muted-foreground">All time</p>
             </CardContent>
           </Card>
         </div>
         {/* Achievement Badge */}
-        <Card className="mb-8 bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                <Award className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-green-800">Eco-Warrior Achievement!</h3>
-                <p className="text-green-700">You've saved {totalWeeklyEnergy} kWh this week!</p>
-              </div>
-              <Badge className="ml-auto bg-green-600">
-                Top Performer
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
         {/* Daily Energy Savings Chart */}
         <Card>
           <CardHeader>
@@ -181,96 +221,24 @@ const WorkerDashboard = () => {
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={dailyEnergySavings}>
+                <LineChart data={dailyEnergySavings}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="day" />
                   <YAxis />
-                  <Tooltip formatter={(value) => [`${value} kWh`, ""]} />
-                  <Area 
-                    type="monotone" 
-                    dataKey="saved" 
-                    stroke="hsl(var(--primary))" 
-                    fill="hsl(var(--primary))" 
-                    fillOpacity={0.3}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="target" 
-                    stroke="hsl(var(--muted-foreground))" 
-                    strokeDasharray="5 5"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-        {/* Weekly Progress Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Weekly Performance Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={weeklyProgress}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="week" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line 
-                    type="monotone" 
-                    dataKey="efficiency" 
-                    stroke="hsl(var(--primary))" 
-                    strokeWidth={3}
-                    dot={{ fill: "hsl(var(--primary))", strokeWidth: 2, r: 4 }}
+                  <Tooltip formatter={(value, name, props) => [`${value} kWh`, "Energy Saved"]} labelFormatter={label => `Day: ${label}`} />
+                  <Line
+                    type="monotone"
+                    dataKey="saved"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    dot={{ r: 4, fill: "hsl(var(--primary))" }}
                   />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
-        {/* Personal Stats Summary */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Personal Impact Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="text-center p-4 bg-green-50 rounded-lg">
-                <div className="text-3xl font-bold text-green-600 mb-2">{totalWeeklyEnergy}</div>
-                <div className="text-sm text-green-700">kWh Saved This Week</div>
-              </div>
-              <div className="text-center p-4 bg-blue-50 rounded-lg">
-                <div className="text-3xl font-bold text-blue-600 mb-2">{weeklyProgress.length > 0 ? (weeklyProgress.reduce((a, b) => a + b.efficiency, 0) / weeklyProgress.length).toFixed(1) : '0'}%</div>
-                <div className="text-sm text-blue-700">Average Weekly Efficiency</div>
-              </div>
-              <div className="text-center p-4 bg-orange-50 rounded-lg">
-                <div className="text-3xl font-bold text-orange-600 mb-2">{todaysStats.co2Reduced}</div>
-                <div className="text-sm text-orange-700">kg CO₂ Reduced This Week</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        {/* Live Updates Section */}
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle>Live Deliveries</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="max-h-64 overflow-y-auto">
-              {liveDeliveries.length === 0 ? (
-                <div className="text-muted-foreground">No new deliveries yet.</div>
-              ) : (
-                liveDeliveries.map((delivery, idx) => (
-                  <div key={delivery.id || idx} className="p-2 border-b last:border-b-0">
-                    <div className="font-semibold">Delivery #{delivery.id}</div>
-                    <div className="text-xs text-muted-foreground">Energy Used: {delivery.energy_used} kWh | Delivered At: {delivery.delivered_at}</div>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Removed Live Deliveries section */}
       </div>
     </div>
   );

@@ -28,7 +28,7 @@ export const WarehouseGrid = ({
   const getCellClass = (x: number, y: number) => {
     const cellType = layout[y][x];
     let baseClass = "w-6 h-6 border border-border flex items-center justify-center text-xs font-bold ";
-    
+
     switch (cellType) {
       case 'dock':
         baseClass += "bg-blue-200 text-blue-800";
@@ -41,7 +41,7 @@ export const WarehouseGrid = ({
         baseClass += "bg-background";
         break;
     }
-    
+
     return baseClass;
   };
 
@@ -63,9 +63,9 @@ export const WarehouseGrid = ({
 
   return (
     <div className="grid gap-0 border-2 border-border p-4 bg-muted/20 rounded-lg overflow-auto">
-      <div 
+      <div
         className="grid gap-0"
-        style={{ 
+        style={{
           gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))`,
           gridTemplateRows: `repeat(${height}, minmax(0, 1fr))`
         }}
@@ -76,7 +76,7 @@ export const WarehouseGrid = ({
             const hasItem = isItemLocation(x, y);
             const onPath = isOnPath(x, y);
             const item = getItemAtLocation(x, y);
-            
+
             return (
               <div
                 key={`${x}-${y}`}
@@ -87,10 +87,10 @@ export const WarehouseGrid = ({
                   hasItem && !isForklift && "bg-red-200"
                 )}
                 title={
-                  isForklift 
-                    ? "Forklift" 
-                    : hasItem 
-                      ? `Item: ${item?.aisle} (${item?.weight}kg)` 
+                  isForklift
+                    ? "Forklift"
+                    : hasItem
+                      ? `Item: ${item?.aisle} (${item?.weight}kg)`
                       : layout[y][x]
                 }
               >
@@ -100,7 +100,7 @@ export const WarehouseGrid = ({
           })
         )}
       </div>
-      
+
       {/* Legend */}
       <div className="mt-4 flex flex-wrap gap-4 text-sm">
         <div className="flex items-center gap-2">
